@@ -9,51 +9,76 @@
 
 #define STACK_SIZE SIGSTKSZ
 
-ucontext_t footx,bartx;
+int cswitch = 0;
+//ucontext_t footx,bartx;
 
-void* foo(ucontext_t *bartx){
+void foo(ucontext_t *footx, ucontext_t *bartx){
     while(1){
-        puts("foo\n");
+        printf("foo\n");
+		if(cswitch){
+			cswitch = 0;
+			swapcontext(footx,bartx);
+		}
     }
 }
 
-void* bar(ucontext_t *footx){
+void bar(ucontext_t *footx, ucontext_t *bartx){
     while(1){
-        puts("bar\n");
+        printf("bar\n");
+		if(cswitch){
+			cswitch = 0;
+			swapcontext(bartx,footx);
+		}
     }
 }
 
 void ring(int signum){
-	printf("Switching contexts\n");
+	//printf("Switching contexts\n");
+
+	cswitch = 1;
 
 }
 
 
 int main(int argc, char **argv){
-    
+    ucontext_t footx,bartx;
 
     if (argc != 1) {
 		printf(": USAGE Program Name and no Arguments expected\n");
 		exit(1);
 	}
 
-    // Use sigaction to register signal handler
-	struct sigaction sa;
-	memset (&sa, 0, sizeof (sa));
-	sa.sa_handler = &ring;
-	sigaction (SIGPROF, &sa, NULL);
+    if (getcontext(&footx) < 0){
+		perror("getcontext");
+		exit(1);
+	}
 
-	// Create timer struct
+	if (getcontext(&bartx) < 0){
+		perror("getcontext");
+		exit(1);
+	}
+
+	// // Use sigaction to register signal handler
+	struct sigaction sa;
+	memset(&sa, 0, sizeof (sa));
+	sa.sa_handler = &ring;
+	sigaction(SIGPROF, &sa, NULL);
+
+	// // Create timer struct
 	struct itimerval timer;
 
-	// Set up what the timer should reset to after the timer goes off
+	// // Set up what the timer should reset to after the timer goes off
 	timer.it_interval.tv_usec = 0; 
-	timer.it_interval.tv_sec = 5;
+	timer.it_interval.tv_sec = 1;
 
     timer.it_value.tv_usec = 0;
 	timer.it_value.tv_sec = 1;
 
-    void *foostack=malloc(STACK_SIZE);
+	// // Set the timer up (start the timer)
+	setitimer(ITIMER_PROF, &timer, NULL);
+
+
+    void *foostack = malloc(STACK_SIZE);
     void *barstack = malloc(STACK_SIZE);
 
     /* Setup context that we are going to use */
@@ -66,14 +91,16 @@ int main(int argc, char **argv){
 	bartx.uc_stack.ss_sp=barstack;
 	bartx.uc_stack.ss_size=STACK_SIZE;
 	bartx.uc_stack.ss_flags=0;
+	
+    makecontext(&footx, (void*)&foo,2,&footx,&bartx);
+    makecontext(&bartx, (void*)&bar,2,&footx,&bartx);
 
-    makecontext(&footx, (void*)&foo,1,&bartx);
-    makecontext(&bartx, (void*)&bar,1,&footx);
-
-    // Set the timer up (start the timer)
-	setitimer(ITIMER_PROF, &timer, NULL);
-
-    while(1);
-
-    return 0;
+    //swapcontext(&maintx,&footx);
+	
+	foo(&footx,&bartx);
+	
+	//Does not run
+	puts("finished running");
+	return 0;
+    
 }
