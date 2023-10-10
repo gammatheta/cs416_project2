@@ -16,6 +16,11 @@ double avg_resp_time=0;
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
 #define STACK_SIZE SIGSTKSZ
+uint idcounter = 0;
+ucontext_t mainctx,schedulerctx;
+void *schedstack;
+int ctxswitch = 0;
+enum Boolean fstrun = true;
 
 
 /* create a new thread */
@@ -23,18 +28,88 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg) {
 
        // - create Thread Control Block (TCB)
-	   pthread_t = new_thread;
        // - create and initialize the context of this worker thread
-	   getcontext(&context)
        // - allocate space of stack for this thread to run
-	   void *stack = malloc(STACK_SIZE)
        // after everything is set, push this thread into run queue and 
-		node * head = NULL;
-		head = (node *) malloc(sizeof(node));
-
        // - make it ready for the execution.
 
        // YOUR CODE HERE
+	   if(fstrun){//if the first run of worker_create function
+		tcb *thread = malloc(sizeof(tcb));
+
+		thread->id = idcounter;
+		idcounter++;
+		thread->status = READY;
+		
+		if (getcontext(&(thread->context)) < 0){
+			perror("getcontext");
+			exit(1);
+		}
+
+		if(getcontext(&schedulerctx) < 0){
+			perror("getcontext");
+			exit(1);
+		}
+
+		if (getcontext(&mainctx) < 0){
+			perror("getcontext");
+			exit(1);
+		}
+
+		schedstack = malloc(STACK_SIZE);
+
+		/* Setup context that we are going to use */
+		schedulerctx.uc_link=NULL;
+		schedulerctx.uc_stack.ss_sp= schedstack;
+		schedulerctx.uc_stack.ss_size=STACK_SIZE;
+		schedulerctx.uc_stack.ss_flags=0;
+
+		makecontext(&schedulerctx, (void*)&schedule,0);
+
+		//Set up scheduler
+		swapcontext(&mainctx, &schedulerctx); //after swapcontext returns from scheduler, will go to next line
+
+		/* Setup context that we are going to use */
+		thread->stack = malloc(STACK_SIZE);
+
+		(thread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
+		(thread->context).uc_stack.ss_sp= thread->stack;
+		(thread->context).uc_stack.ss_size=STACK_SIZE;
+		(thread->context).uc_stack.ss_flags=0;
+
+		makecontext(&(thread->context), (void*)function, 1, arg);
+
+		//add tcb to runqueue
+		//switch to scheduler context and run thread based on scheduling protocol
+		//continue building runqueue or regular execution 
+
+		fstrun = false;
+
+	   }else{//if not the first run of worker_create function
+		tcb *thread = malloc(sizeof(tcb));
+
+		thread->id = idcounter;
+		idcounter++;
+		thread->status = READY;
+		
+		if (getcontext(&(thread->context)) < 0){
+			perror("getcontext");
+			exit(1);
+		}
+		
+		/* Setup context that we are going to use */
+		thread->stack = malloc(STACK_SIZE);
+
+		(thread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
+		(thread->context).uc_stack.ss_sp= thread->stack;
+		(thread->context).uc_stack.ss_size=STACK_SIZE;
+		(thread->context).uc_stack.ss_flags=0;
+
+		makecontext(&(thread->context), (void*)function, 1, arg);
+
+		//add tcb to runqueue
+		//switch to scheduler context and run thread based on scheduling protocol
+	   }
 	
     return 0;
 };
