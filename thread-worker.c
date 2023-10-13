@@ -290,3 +290,21 @@ void dequeue(struct Queue* queue, Node* node) {
 
 
 }
+
+void enqueue(tcb *thread){//insert tcb at end of runqueue
+//make new node and then add thread to node->data
+
+struct Node *newNode = malloc(sizeof(struct Node));
+
+newNode->data = thread;
+newNode->next = NULL;
+
+struct Node *ptr = runqueuehead;
+
+	while(ptr->next != NULL){
+		ptr = ptr->next;
+	}
+
+	ptr->next = newNode;
+
+}
