@@ -15,6 +15,7 @@
 #define READY 0
 #define SCHEDULED 1
 #define BLOCKED 2
+#define Quantum 10
 
 /* Include enums or other helpful types */
 enum boolean {false, true};
@@ -42,6 +43,12 @@ typedef struct TCB {
 	void *stack;
 	// thread priority
 	// And more ...
+	int QuantumCounter; //This variable is meant to be incremented everytime the thread has run for quantum.
+	int TurnAroundCounter; //This variable is incremented every single quantum that happens in total since
+						  //it is first added to the Quene, until the thread is finished. 
+	int ResponseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
+							//it is added into the Quene and has NOT been scheduled yet. 
+
 	// Possible add metrics for completion time, arrival time, 
 	// first run time, number of context switches for per thread TCB
 	// 
