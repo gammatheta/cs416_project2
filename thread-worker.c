@@ -84,12 +84,13 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		makecontext(&(newthread->context), (void*)function, 1, arg);
 
 		//add tcb to runqueue
-		runqueuehead->data = newthread;
-		//switch to scheduler context and run thread based on scheduling protocol
-		//continue building runqueue or regular execution 
+		enqueue(newthread);
 
 		fstrun = false;
+		//switch to scheduler context and run thread based on scheduling protocol
+		//continue building runqueue or regular execution
 
+		swapcontext(&mainctx, &schedulerctx);
 
 
 	   }else{//if not the first run of worker_create function
@@ -118,7 +119,12 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		makecontext(&(newthread->context), (void*)function, 1, arg);
 
 		//add tcb to runqueue
+		enqueue(newthread);
+
 		//switch to scheduler context and run thread based on scheduling protocol
+		//continue building runqueue or regular execution
+
+		swapcontext(&mainctx, &schedulerctx);
 	   }
 	
     return 0;
@@ -220,21 +226,44 @@ static void schedule() {
 
 	if(fstrun){//first run of scheduler
 		/* Set up runqueue data structure (queue) 
-		*  if MLFQ need multiple; if PSJF need only one
-		*  malloc head of either runqueue(s) 
+		*  if MLFQ need multiple; if PSJF need only one 
 		*  successive calls will require to make nodes in worker_create and add tcb to runqueue
 		*/
 		if(PSJF){
 			
 			//check if need anything else for this (ie call sched_psjf())
 
-		}else{
+		}else{//set up MLFQ
 
 		}
 
-		swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
-	}else{
+		// // Use sigaction to register signal handler
+		struct sigaction sa;
+		memset(&sa, 0, sizeof (sa));
+		sa.sa_handler = &handler;
+		sigaction(SIGPROF, &sa, NULL);
 
+		// // Create timer struct
+		struct itimerval timer;
+
+		// // Set up what the timer should reset to after the timer goes off
+		timer.it_interval.tv_usec = 0; 
+		timer.it_interval.tv_sec = 1;
+
+		timer.it_value.tv_usec = 0;
+		timer.it_value.tv_sec = 1;
+
+		// // Set the timer up (start the timer)
+		setitimer(ITIMER_PROF, &timer, NULL);
+
+		swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
+	}
+
+	if(PSJF){
+		sched_psjf();
+	}
+	else{
+		sched_mlfq();
 	}
 
 }
@@ -272,23 +301,23 @@ void print_app_stats(void) {
 void enqueue(tcb *thread){//insert tcb at end of runqueue
 //make new node and then add thread to node->data
 
-if(runqueuehead == NULL)
-{
-	runqueuehead->data = thread;
-	runqueuehead->next = NULL;
-	return;
-}
-	struct Node *newNode = malloc(sizeof(struct Node));	
-	newNode->data = thread;
-	newNode->next = NULL;
-
-	struct Node *ptr = runqueuehead;
-
-	while(ptr->next != NULL){
-		ptr = ptr->next;
+	if(runqueuehead == NULL)
+	{
+		runqueuehead->data = thread;
+		runqueuehead->next = NULL;
+		return;
 	}
+		struct Node *newNode = malloc(sizeof(struct Node));	
+		newNode->data = thread;
+		newNode->next = NULL;
 
-	ptr->next = newNode;
+		struct Node *ptr = runqueuehead;
+
+		while(ptr->next != NULL){
+			ptr = ptr->next;
+		}
+
+		ptr->next = newNode;
 
 }
 
@@ -301,7 +330,7 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 	{
 		return NULL; 
 	}
-	if(ptr->data = thread)
+	if(ptr->data == thread)
 	{
 		runqueuehead = runqueuehead->next;
 		free(ptr);
@@ -326,5 +355,7 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 
 
 void handler(int signum){//signal handler
+
+swapcontext(&mainctx,&schedulerctx);
 
 }
