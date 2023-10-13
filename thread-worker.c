@@ -225,8 +225,7 @@ static void schedule() {
 		*  successive calls will require to make nodes in worker_create and add tcb to runqueue
 		*/
 		if(PSJF){
-			runqueuehead = malloc(sizeof(struct Node));
-			runqueuehead->next = NULL;
+			
 			//check if need anything else for this (ie call sched_psjf())
 
 		}else{
@@ -273,12 +272,17 @@ void print_app_stats(void) {
 void enqueue(tcb *thread){//insert tcb at end of runqueue
 //make new node and then add thread to node->data
 
-struct Node *newNode = malloc(sizeof(struct Node));
+if(runqueuehead == NULL)
+{
+	runqueuehead->data = thread;
+	runqueuehead->next = NULL;
+	return;
+}
+	struct Node *newNode = malloc(sizeof(struct Node));	
+	newNode->data = thread;
+	newNode->next = NULL;
 
-newNode->data = thread;
-newNode->next = NULL;
-
-struct Node *ptr = runqueuehead;
+	struct Node *ptr = runqueuehead;
 
 	while(ptr->next != NULL){
 		ptr = ptr->next;
@@ -290,11 +294,32 @@ struct Node *ptr = runqueuehead;
 
 tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 //return tcb to caller func 
-struct Node *ptr = runqueuehead;
+	struct Node *ptr = runqueuehead;
+	struct Node *ptr2 = runqueuehead;
 
-if(ptr == NULL){
+	if(ptr == NULL)
+	{
+		return NULL; 
+	}
+	if(ptr->data = thread)
+	{
+		runqueuehead = runqueuehead->next;
+		free(ptr);
+		//free(ptr2);
+		return thread;
+	}
 
-}
+	while(1)
+	{
+		ptr2=ptr2->next;
+		if(ptr2->data == thread)
+		{
+			ptr = ptr2->next;
+			free(ptr2);
+			return thread;
+		}
+		ptr = ptr->next;
+	}
 
 
 }
