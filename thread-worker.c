@@ -5,6 +5,8 @@
 // iLab Server:
 
 #include "thread-worker.h"
+#include <string.h>
+#include <sys/time.h>
 
 //Global counter for total context switches and 
 //average turn around and response time
@@ -270,6 +272,44 @@ static void schedule() {
 
 /* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
 static void sched_psjf() {
+	struct Node* ptr = runqueuehead;
+	struct Node* ptr2 = runqueuehead;
+	struct Node* ptr3 = runqueuehead;
+
+	while(ptr!=NULL)
+	{
+		
+		ptr->data->TurnAroundCounter = ptr->data->TurnAroundCounter+1;
+		ptr->data->ResponseTimeCounter = ptr->data->ResponseTimeCounter+1;
+		ptr = ptr->next;
+	}
+	//ptr = runquenehead; 
+
+	int minQc = ptr2->data->QuantumCounter;
+	ptr2 = ptr2->next;
+	while(ptr2!=NULL)
+	{
+		//minQc = ptr->data->QuantumCounter;
+		if(minQc == 1)
+		{
+			ptr2->data->ResponseTimeCounter = ptr2->data->ResponseTimeCounter-1;
+			return;
+			// Run the thread of the curren pointer. 
+		}
+
+		if(minQc>ptr2->data->QuantumCounter)
+		{
+			minQc = ptr2->data->QuantumCounter;
+			ptr3 = ptr2;
+		}
+		ptr2 = ptr2->next;
+
+	}
+	ptr3->data->QuantumCounter = ptr3->data->QuantumCounter+1;
+	ptr3->data->ResponseTimeCounter = ptr3->data->ResponseTimeCounter-1;
+	//Need to turn the thread of ptr3;
+
+
 	// - your own implementation of PSJF
 	// (feel free to modify arguments and return types)
 
@@ -318,6 +358,15 @@ void enqueue(tcb *thread){//insert tcb at end of runqueue
 		}
 
 		ptr->next = newNode;
+
+		if(thread->QuantumCounter == 0 && thread->ResponseTimeCounter !=-1 )
+		{
+			avg_resp_time = thread->ResponseTimeCounter*Quantum; 
+		}
+		else
+		{
+			thread->ResponseTimeCounter = -1;
+		}
 
 }
 
