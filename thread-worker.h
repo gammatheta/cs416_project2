@@ -58,6 +58,16 @@ struct Node {
 	struct Node* head; //Points to head of Q
 };
 
+struct Node {
+    struct tcb *data; // Pointer to the struct
+    struct Node *next; // Pointer to the next node
+};
+
+void enqueue(tcb *thread); //insert tcb at end of runqueue
+tcb* dequeue(tcb *thread); //delete specific tcb
+
+void handler(int signum);
+
 
 /* Function Declarations: */
 
