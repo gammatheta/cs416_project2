@@ -1,4 +1,3 @@
-
 // File:	worker_t.h
 
 // List all group member's name:
@@ -8,19 +7,26 @@
 #ifndef WORKER_T_H
 #define WORKER_T_H
 
-
 #define _GNU_SOURCE
 
 /* To use Linux pthread Library in Benchmark, you have to comment the USE_WORKERS macro */
 #define USE_WORKERS 1
+#define STACK_SIZE SIGSTKSZ
+#define READY 0
+#define SCHEDULED 1
+#define BLOCKED 2
+
+/* Include enums or other helpful types */
+enum boolean {false, true};
 
 /* include lib header files that you need here: */
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <ucontext.h>
+#include <signal.h>
 
 typedef uint worker_t;
 
@@ -36,6 +42,9 @@ typedef struct TCB {
 	void *stack;
 	// thread priority
 	// And more ...
+	// Possible add metrics for completion time, arrival time, 
+	// first run time, number of context switches for per thread TCB
+	// 
 
 	// YOUR CODE HERE
 } tcb; 
@@ -51,15 +60,12 @@ typedef struct worker_mutex_t {
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
-struct Node {
-    struct Data* data; // Pointer to the struct
-    struct Node* next; // Pointer to the next node
-	struct Node* tail;  //Point to tail of Q; 
-	struct Node* head; //Points to head of Q
-};
+static void sched_mlfq();
+static void sched_psjf();
+static void schedule();
 
 struct Node {
-    struct tcb *data; // Pointer to the struct
+    tcb *data; // Pointer to the struct
     struct Node *next; // Pointer to the next node
 };
 
