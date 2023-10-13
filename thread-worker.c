@@ -15,12 +15,12 @@ double avg_resp_time=0;
 
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
-#define STACK_SIZE SIGSTKSZ
 uint idcounter = 0;
 ucontext_t mainctx,schedulerctx;
 void *schedstack;
 int ctxswitch = 0;
-enum Boolean fstrun = true;
+enum boolean fstrun = true;
+struct Node *runqueuehead;
 
 
 /* create a new thread */
@@ -35,13 +35,17 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
        // YOUR CODE HERE
 	   if(fstrun){//if the first run of worker_create function
-		tcb *thread = malloc(sizeof(tcb));
+		tcb *newthread = malloc(sizeof(tcb));
 
-		thread->id = idcounter;
+		newthread->id = idcounter;
+
+		thread = &(newthread->id); //unsure if works
+
 		idcounter++;
-		thread->status = READY;
+
+		newthread->status = READY;
 		
-		if (getcontext(&(thread->context)) < 0){
+		if (getcontext(&(newthread->context)) < 0){
 			perror("getcontext");
 			exit(1);
 		}
@@ -70,42 +74,48 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		swapcontext(&mainctx, &schedulerctx); //after swapcontext returns from scheduler, will go to next line
 
 		/* Setup context that we are going to use */
-		thread->stack = malloc(STACK_SIZE);
+		newthread->stack = malloc(STACK_SIZE);
 
-		(thread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
-		(thread->context).uc_stack.ss_sp= thread->stack;
-		(thread->context).uc_stack.ss_size=STACK_SIZE;
-		(thread->context).uc_stack.ss_flags=0;
+		(newthread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
+		(newthread->context).uc_stack.ss_sp= newthread->stack;
+		(newthread->context).uc_stack.ss_size=STACK_SIZE;
+		(newthread->context).uc_stack.ss_flags=0;
 
-		makecontext(&(thread->context), (void*)function, 1, arg);
+		makecontext(&(newthread->context), (void*)function, 1, arg);
 
 		//add tcb to runqueue
+		runqueuehead->data = newthread;
 		//switch to scheduler context and run thread based on scheduling protocol
 		//continue building runqueue or regular execution 
 
 		fstrun = false;
 
-	   }else{//if not the first run of worker_create function
-		tcb *thread = malloc(sizeof(tcb));
 
-		thread->id = idcounter;
+
+	   }else{//if not the first run of worker_create function
+		tcb *newthread = malloc(sizeof(tcb));
+
+		newthread->id = idcounter;
+
+		thread = &(newthread->id); //unsure if works
+
 		idcounter++;
-		thread->status = READY;
+		newthread->status = READY;
 		
-		if (getcontext(&(thread->context)) < 0){
+		if (getcontext(&(newthread->context)) < 0){
 			perror("getcontext");
 			exit(1);
 		}
 		
 		/* Setup context that we are going to use */
-		thread->stack = malloc(STACK_SIZE);
+		newthread->stack = malloc(STACK_SIZE);
 
-		(thread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
-		(thread->context).uc_stack.ss_sp= thread->stack;
-		(thread->context).uc_stack.ss_size=STACK_SIZE;
-		(thread->context).uc_stack.ss_flags=0;
+		(newthread->context).uc_link= &schedulerctx; //when thread finishes, will return to scheduler context
+		(newthread->context).uc_stack.ss_sp= newthread->stack;
+		(newthread->context).uc_stack.ss_size=STACK_SIZE;
+		(newthread->context).uc_stack.ss_flags=0;
 
-		makecontext(&(thread->context), (void*)function, 1, arg);
+		makecontext(&(newthread->context), (void*)function, 1, arg);
 
 		//add tcb to runqueue
 		//switch to scheduler context and run thread based on scheduling protocol
@@ -197,13 +207,36 @@ static void schedule() {
 	// 		sched_mlfq();
 
 	// YOUR CODE HERE
+	
 
 // - schedule policy
 #ifndef MLFQ
 	// Choose PSJF
+#define PSJF 1
 #else 
 	// Choose MLFQ
+#define MLFQ 1
 #endif
+
+	if(fstrun){//first run of scheduler
+		/* Set up runqueue data structure (queue) 
+		*  if MLFQ need multiple; if PSJF need only one
+		*  malloc head of either runqueue(s) 
+		*  successive calls will require to make nodes in worker_create and add tcb to runqueue
+		*/
+		if(PSJF){
+			runqueuehead = malloc(sizeof(struct Node));
+			runqueuehead->next = NULL;
+			//check if need anything else for this (ie call sched_psjf())
+
+		}else{
+
+		}
+
+		swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
+	}else{
+
+	}
 
 }
 
@@ -237,60 +270,6 @@ void print_app_stats(void) {
 // Feel free to add any other functions you need
 
 // YOUR CODE HERE
-
-struct Queue* createQueue() {
-    struct Queue* queue = (struct Queue*)malloc(sizeof(struct Queue));
-    queue->head = queue->tail = NULL;
-    return queue;
-}
-
-void enqueue(struct Queue* queue, struct data) {
-    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
-    newNode->data = data;
-    newNode->next = NULL;
-
-    if (queue->rear == NULL) {
-        queue->head = queue->tail = newNode;
-        return;
-    }
-
-    queue->rear->next = newNode;
-    queue->rear = newNode;
-}
-
-void dequeue(struct Queue* queue, Node* node) {
-	node* ptr = quene->head;
-	node* ptr2 = quene->head;
-
-	if(node == quene->head)
-	{
-		quene->head = quene->head->next;
-		free(ptr);
-		return;
-	}
-
-	ptr2 = ptr2->next;
-	while(ptr2!=NULL)
-	{
-		if(ptr2 == node)
-		{
-			if(ptr2->next!=NULL)
-			{
-				ptr = ptr2->next;
-			}
-			else
-			{
-				quene->tail = ptr;
-			}
-			free(ptr2);
-		}
-		ptr = ptr->next;
-		ptr2 = pt2->next;
-	}
-
-
-}
-
 void enqueue(tcb *thread){//insert tcb at end of runqueue
 //make new node and then add thread to node->data
 
@@ -306,5 +285,21 @@ struct Node *ptr = runqueuehead;
 	}
 
 	ptr->next = newNode;
+
+}
+
+tcb* dequeue(tcb* thread){//delete node with specific thread tcb
+//return tcb to caller func 
+struct Node *ptr = runqueuehead;
+
+if(ptr == NULL){
+
+}
+
+
+}
+
+
+void handler(int signum){//signal handler
 
 }
