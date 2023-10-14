@@ -4,6 +4,7 @@
 // username of iLab:
 // iLab Server:
 
+//Line 377
 #include "thread-worker.h"
 #include <string.h>
 #include <sys/time.h>
@@ -23,6 +24,7 @@ void *schedstack;
 int ctxswitch = 0;
 enum boolean fstrun = true;
 struct Node *runqueuehead;
+tcb *currThread;
 
 
 /* create a new thread */
@@ -73,8 +75,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		makecontext(&schedulerctx, (void*)&schedule,0);
 
 		//Set up scheduler
-		swapcontext(&mainctx, &schedulerctx); //after swapcontext returns from scheduler, will go to next line
-
+		//swapcontext(&mainctx, &schedulerctx); //after swapcontext returns from scheduler, will go to next line
+		schedule();
 		/* Setup context that we are going to use */
 		newthread->stack = malloc(STACK_SIZE);
 
@@ -95,7 +97,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		swapcontext(&mainctx, &schedulerctx);
 
 
-	   }else{//if not the first run of worker_create function
+	   }
+	   else{//if not the first run of worker_create function
 		tcb *newthread = malloc(sizeof(tcb));
 
 		newthread->id = idcounter;
@@ -258,15 +261,26 @@ static void schedule() {
 		// // Set the timer up (start the timer)
 		setitimer(ITIMER_PROF, &timer, NULL);
 
-		swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
+		//swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
+		return;
+	}
+	while(runqueuehead!= NULL)
+	{
+		if(PSJF){
+			sched_psjf();
+			swapcontext(&schedulerctx, &currThread->context);
+			if(currThread!=NULL)
+			{
+				enqueue(currThread);
+			}
+			swapcontext(&schedulerctx, &mainctx);
+		}
+		else{
+			sched_mlfq();
+		}
 	}
 
-	if(PSJF){
-		sched_psjf();
-	}
-	else{
-		sched_mlfq();
-	}
+	fstrun = true; 
 
 }
 
@@ -275,7 +289,6 @@ static void sched_psjf() {
 	struct Node* ptr = runqueuehead;
 	struct Node* ptr2 = runqueuehead;
 	struct Node* ptr3 = runqueuehead;
-
 	while(ptr!=NULL)
 	{
 		
@@ -285,19 +298,27 @@ static void sched_psjf() {
 	}
 	//ptr = runquenehead; 
 
-	int minQc = ptr2->data->QuantumCounter;
+	int minQc = -1;
+	if(ptr2->data->status != 2)
+	{
+		 minQc = ptr2->data->QuantumCounter;
+	}
+
 	ptr2 = ptr2->next;
 	while(ptr2!=NULL)
 	{
 		//minQc = ptr->data->QuantumCounter;
-		if(minQc == 1)
+		if(minQc == 0)
 		{
-			ptr2->data->ResponseTimeCounter = ptr2->data->ResponseTimeCounter-1;
+			ptr->data->TurnAroundCounter = ptr->data->TurnAroundCounter-1;
+			ptr3->data->ResponseTimeCounter = ptr3->data->ResponseTimeCounter-1;
+			ptr3->data->QuantumCounter = ptr3->data->QuantumCounter+1;
+			ptr3->data->status = 1; 
+			currThread  = dequeue(ptr3->data);
 			return;
-			// Run the thread of the curren pointer. 
 		}
 
-		if(minQc>ptr2->data->QuantumCounter)
+		if((minQc == -1  && ptr2->data->status!=2) || (minQc>ptr2->data->QuantumCounter && ptr2->data->status!=2))
 		{
 			minQc = ptr2->data->QuantumCounter;
 			ptr3 = ptr2;
@@ -305,8 +326,20 @@ static void sched_psjf() {
 		ptr2 = ptr2->next;
 
 	}
-	ptr3->data->QuantumCounter = ptr3->data->QuantumCounter+1;
-	ptr3->data->ResponseTimeCounter = ptr3->data->ResponseTimeCounter-1;
+	if(minQc != -1)
+	{
+		ptr3->data->QuantumCounter = ptr3->data->QuantumCounter+1;
+		ptr->data->TurnAroundCounter = ptr->data->TurnAroundCounter-1;
+		ptr3->data->ResponseTimeCounter = ptr3->data->ResponseTimeCounter-1;
+		ptr3->data->status = 1;
+		currThread = dequeue(ptr3->data);
+		//swapcontext(&schedulerctx, &tcbPtr->context);
+
+	}
+	else
+	{
+		printf("Everything is blocked.");
+	}
 	//Need to turn the thread of ptr3;
 
 
@@ -341,6 +374,7 @@ void print_app_stats(void) {
 void enqueue(tcb *thread){//insert tcb at end of runqueue
 //make new node and then add thread to node->data
 
+	thread->status = 0;
 	if(runqueuehead == NULL)
 	{
 		runqueuehead->data = thread;
@@ -372,6 +406,8 @@ void enqueue(tcb *thread){//insert tcb at end of runqueue
 
 tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 //return tcb to caller func 
+
+	tot_cntx_switches++;
 	struct Node *ptr = runqueuehead;
 	struct Node *ptr2 = runqueuehead;
 
@@ -405,6 +441,6 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 
 void handler(int signum){//signal handler
 
-swapcontext(&mainctx,&schedulerctx);
+swapcontext(&(currThread->context), &schedulerctx);
 
 }
