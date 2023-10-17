@@ -8,7 +8,7 @@
 #include <ucontext.h>
 
 #define STACK_SIZE SIGSTKSZ
-
+https://github.com/aniel928/CS416/blob/master/Asst1/my_pthread.c#L552 
 int cswitch = 0;
 //ucontext_t footx,bartx;
 
