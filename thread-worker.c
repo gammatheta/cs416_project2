@@ -444,3 +444,26 @@ void handler(int signum){//signal handler
 swapcontext(&(currThread->context), &schedulerctx);
 
 }
+
+/* How MLFQ would look visually example */
+/*	(highest priority)
+*	Q0 T1 Main	(time slice: 10ms)
+*	Q1 T3		(time slice: 20ms)
+*	Q2		(time slice: 30ms)
+*	Q3 T2		(time slice: 40ms)
+*	(lowest priority)
+*	T3 is given a maximum of 20ms to run since in Q1 and in its tcb will have to keep a counter to see how many time quantums it has run. 
+*	If T3 uses up its time quantum, meanining while it is in Q1, it ended up running for a total of 20ms, even if it ran for 10ms once then yielded and then ran for another 10ms, it will
+*	get moved down to a lower queue (Q2). This concept will happen for all tcbs(threads) except for main (id = 0). After some designated time quantum (S), all currently queued tcbs(threads)
+*	will get moved to Q0 and policy continues. 
+*
+*	How to check if tcb gave up CPU before time slice
+*
+*	Using T3 as example, could be the case where T3 is changed to its status RUNNING and it called worker_yield only after 10ms, 
+*	where its status would be changed to READY, and then it swapcontext 
+*	to the scheduler, where the scheduler checks if the tcb(thread) has ran for a full time slice of its queue (Q1 -> 20ms) and it would see that it only ran for 10ms.
+* 	Then, the scheduler would usually allow for the thread to run for another 10ms (based on timer) where it would have completed its time slice and then be moved down a queue (Q2),
+*	but it sees that T3 status is set to READY or !RUNNING, where it knows that T3 gave up CPU, so it would then instead be kept at Q1 with its time slice counter at 10ms (or 1 quantum).
+* 	Scheduler would then enqueue T3 in Q1 and look for next tcb(thread) to run, and when encounter T3 again, T3 would run and then timer go off at 10ms, time slice complete, move T3 
+* 	down to Q2 and reset counter for time slice to 0.
+*/
