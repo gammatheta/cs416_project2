@@ -4,6 +4,7 @@
 // username of iLab:
 // iLab Server:
 
+// Line 59 
 #ifndef WORKER_T_H
 #define WORKER_T_H
 
@@ -13,7 +14,7 @@
 #define USE_WORKERS 1
 #define STACK_SIZE SIGSTKSZ
 #define READY 0
-#define SCHEDULED 1
+#define RUNNING 1
 #define BLOCKED 2
 #define Quantum 10
 
@@ -56,12 +57,9 @@ typedef struct TCB {
 	// YOUR CODE HERE
 } tcb; 
 
-/* mutex struct definition */
-typedef struct worker_mutex_t {
-	/* add something here */
 
-	// YOUR CODE HERE
-} worker_mutex_t;
+
+
 
 /* define your data structures here: */
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
@@ -75,6 +73,21 @@ struct Node {
     tcb *data; // Pointer to the struct
     struct Node *next; // Pointer to the next node
 };
+
+/* mutex struct definition */
+typedef struct worker_mutex_t {
+	/* add something here */
+	tcb *thread;
+	struct Node *mutexQueneHead; 
+	enum boolean lock;
+	// YOUR CODE HERE
+}worker_mutex_t;
+
+
+/*typedef struct mutexNode {
+    mutex *data; // Pointer to the struct
+    struct mutexNode *next; // Pointer to the next node
+}mutexNode;*/
 
 void enqueue(tcb *thread); //insert tcb at end of runqueue
 tcb* dequeue(tcb *thread); //delete specific tcb
