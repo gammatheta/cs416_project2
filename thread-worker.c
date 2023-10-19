@@ -25,6 +25,7 @@ int ctxswitch = 0;
 enum boolean fstrun = true;
 struct Node *runqueuehead;
 tcb *currThread;
+//struct mutexNode *mutexQueneHead;
 
 
 /* create a new thread */
@@ -143,6 +144,15 @@ int worker_yield() {
 	// - switch from thread context to scheduler context
 
 	// YOUR CODE HERE
+	if(currThread == NULL)
+	{
+		return 0;
+	}
+
+
+	currThread->status = READY;
+	swapcontext(&(currThread->context), &schedulerctx);
+ 
 	
 	return 0;
 };
@@ -152,6 +162,13 @@ void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
+	if(value_ptr==NULL)
+	{
+		return;
+	}
+	//tcb *ptr = value_ptr; 
+	free(currThread->stack);
+	free(currThread);
 };
 
 
@@ -162,13 +179,22 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
+	if(currThread == NULL)
+	{
+		return 0;
+	}
+
+
 	return 0;
 };
 
 /* initialize the mutex lock */
-int worker_mutex_init(worker_mutex_t *mutex, 
-                          const pthread_mutexattr_t *mutexattr) {
+int worker_mutex_init(worker_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
 	//- initialize data structures for this mutex
+	mutex->lock = false;
+    mutex->thread = NULL;
+ 	mutex->mutexQueneHead = malloc(sizeof(struct Node));
+	mutex->mutexQueneHead->data = NULL;
 
 	// YOUR CODE HERE
 	return 0;
@@ -183,6 +209,53 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
         // context switch to the scheduler thread
 
         // YOUR CODE HERE
+
+		/*
+In C, the _sync_lock_test_and_set (or __sync_lock_test_and_set in some compilers) is a built-in function used for atomic operations on variables, 
+primarily in the context of multi-threaded programming to ensure that shared data is accessed safely. This function is often used in low-level programming when 
+you need to perform atomic operations without relying on higher-level synchronization mechanisms like mutexes or semaphores.
+
+Here mutex->lock will automatically be set to false. 
+*/
+		while(__sync_lock_test_and_set(&( mutex->lock), true))
+		{
+			if(mutex->thread == currThread) 
+			{
+				return 0;
+			}
+		}
+
+		mutex->thread->status = READY;
+
+
+		 if(mutex->mutexQueneHead == NULL)
+		 {
+			 mutex->mutexQueneHead->data = currThread;
+			 mutex->mutexQueneHead->next = NULL;
+		 }
+		 else
+		 {
+			struct Node *newNode = malloc(sizeof(struct Node));			
+			newNode->data = currThread;
+			struct Node*ptr =  mutex->mutexQueneHead;
+
+			int loop = 1;
+			while(loop==1)
+			{
+				if(ptr->next==NULL)
+				{
+					ptr->next = newNode;
+					newNode->next=NULL;
+					loop = 0;
+				}
+				ptr=ptr->next;
+			}
+		//	dequeue(currThread);
+			// int x = worker_mutex_yield();
+		 }
+
+
+		mutex->thread = currThread;
         return 0;
 };
 
@@ -191,7 +264,21 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// - release mutex and make it available again. 
 	// - put threads in block list to run queue 
 	// so that they could compete for mutex later.
+	if(mutex->mutexQueneHead == NULL)
+	{
+		mutex->lock = false;
+	}
+	else
+	{
+		struct Node *ptr = mutex->mutexQueneHead;
+		mutex->mutexQueneHead = mutex->mutexQueneHead->next;
+		free(ptr);
 
+		mutex->mutexQueneHead->data->status = RUNNING;
+		mutex->thread = mutex->mutexQueneHead->data;
+		
+	//Pretty sure im missing a vital line at the end. Not sure if it is dequeing something, or going back to scheduler or what. 
+	}
 	// YOUR CODE HERE
 	return 0;
 };
@@ -200,6 +287,7 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex) {
 	// - de-allocate dynamic memory created in worker_mutex_init
+	free(mutex->mutexQueneHead);
 
 	return 0;
 };
@@ -438,32 +526,66 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 
 }
 
+/*void mutexEnqueue(mutex *mutex){//insert tcb at end of runqueue
+//make new node and then add thread to node->data
+
+	if(mutexQueneHead == NULL)
+	{
+		mutexQueneHead->data = mutex;
+		mutexQueneHead->next = NULL;
+		return;
+	}
+		struct mutexNode *newmutexNode = malloc(sizeof(struct mutexNode));	
+		mutexNode->data = mutex;
+		mutexNode->next = NULL;
+
+		struct mutexNode *ptr = mutexQueneHead;
+
+		while(ptr->next != NULL){
+			ptr = ptr->next;
+		}
+
+		ptr->next = newmutexNode;
+
+}
+
+void mutexDequeue(tcb* mutex){//delete node with specific thread tcb
+//return tcb to caller func 
+
+	struct mutexNode *ptr = mutexQueneHead;
+	struct mutexNode *ptr2 = mutexQueneHead;
+
+	if(ptr == NULL)
+	{
+		return NULL; 
+	}
+	if(ptr->data == mutex)
+	{
+		mutexQueneHead = mutexQueneHead->next;
+		enqueue(ptr->mutex->data->thread);
+		free(ptr);
+		//free(ptr2);
+		//return thread;
+	}
+
+	while(1)
+	{
+		ptr2=ptr2->next;
+		if(ptr2->data == thread)
+		{
+			ptr = ptr2->next;
+			enqueue(ptr2->mutex->data->thread);
+			free(ptr2);
+			//return thread;
+		}
+		ptr = ptr->next;
+	}
+
+
+}*/
 
 void handler(int signum){//signal handler
 
 swapcontext(&(currThread->context), &schedulerctx);
 
 }
-
-/* How MLFQ would look visually example */
-/*	(highest priority)
-*	Q0 T1 Main	(time slice: 10ms)
-*	Q1 T3		(time slice: 20ms)
-*	Q2		(time slice: 30ms)
-*	Q3 T2		(time slice: 40ms)
-*	(lowest priority)
-*	T3 is given a maximum of 20ms to run since in Q1 and in its tcb will have to keep a counter to see how many time quantums it has run. 
-*	If T3 uses up its time quantum, meanining while it is in Q1, it ended up running for a total of 20ms, even if it ran for 10ms once then yielded and then ran for another 10ms, it will
-*	get moved down to a lower queue (Q2). This concept will happen for all tcbs(threads) except for main (id = 0). After some designated time quantum (S), all currently queued tcbs(threads)
-*	will get moved to Q0 and policy continues. 
-*
-*	How to check if tcb gave up CPU before time slice
-*
-*	Using T3 as example, could be the case where T3 is changed to its status RUNNING and it called worker_yield only after 10ms, 
-*	where its status would be changed to READY, and then it swapcontext 
-*	to the scheduler, where the scheduler checks if the tcb(thread) has ran for a full time slice of its queue (Q1 -> 20ms) and it would see that it only ran for 10ms.
-* 	Then, the scheduler would usually allow for the thread to run for another 10ms (based on timer) where it would have completed its time slice and then be moved down a queue (Q2),
-*	but it sees that T3 status is set to READY or !RUNNING, where it knows that T3 gave up CPU, so it would then instead be kept at Q1 with its time slice counter at 10ms (or 1 quantum).
-* 	Scheduler would then enqueue T3 in Q1 and look for next tcb(thread) to run, and when encounter T3 again, T3 would run and then timer go off at 10ms, time slice complete, move T3 
-* 	down to Q2 and reset counter for time slice to 0.
-*/
