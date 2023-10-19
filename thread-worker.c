@@ -18,7 +18,7 @@ double avg_resp_time=0;
 uint idcounter = 1; //maintain unique ids for all threads
 ucontext_t schedulerctx; //scheduler contexts
 void *schedstack; //scheduler context stack
-tcb *main;	//main tcb
+tcb *main_tcb;	//main tcb
 enum boolean fstrun = true; //first run global variable
 struct Node *runqueuehead; //PSJF runqueue head pointer
 tcb *currThread; //current running thread
@@ -52,6 +52,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		newthread->priority = 0;
 		newthread->status = READY;
 		newthread->quantumCounter = 0;
+		newthread->fstsched = false;
 		// newthread->turnAroundCounter = 0;
 		// newthread->responseTimeCounter = 0;
 		newthread->timeRan = 0;
@@ -77,16 +78,16 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 		makecontext(&schedulerctx, (void*)&schedule,0);
 
-		main = malloc(sizeof(tcb));
-		main->id = 0;
-		main->priority = 0;
-		main->status = READY;
-		main->quantumCounter = 0;
+		main_tcb = malloc(sizeof(tcb));
+		main_tcb->id = 0;
+		main_tcb->priority = 0;
+		main_tcb->status = READY;
+		main_tcb->quantumCounter = 0;
 		// main->turnAroundCounter = 0;
 		// main->responseTimeCounter = 0;
-		main->timeRan = 0;
+		main_tcb->timeRan = 0;
 
-		if (getcontext(&(main->context)) < 0){
+		if (getcontext(&(main_tcb->context)) < 0){
 			perror("getcontext");
 			exit(1);
 		}
@@ -113,13 +114,14 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		/* Gets current time and places inside struct (second param) */
 		//struct timespec start;
 		//clock_gettime(CLOCK_REALTIME, &start);		
+		clock_gettime(CLOCK_REALTIME,&(newthread->arrivetime));
 
 		if(PSJF){
 			enqueue(newthread);
-			enqueue(main);
+			enqueue(main_tcb);
 		}else{
 			menqueue(newthread);
-			menqueue(main);
+			menqueue(main_tcb);
 		}
 		
 
@@ -127,7 +129,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		//switch to scheduler context and run thread based on scheduling protocol
 		//continue building runqueue or regular execution
 
-		swapcontext(&(main->context), &schedulerctx);
+		swapcontext(&(main_tcb->context), &schedulerctx);
 
 
 	   }else{//if not the first run of worker_create function
@@ -138,6 +140,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		newthread->priority = 0;
 		newthread->status = READY;
 		newthread->quantumCounter = 0;
+		newthread->fstsched = false;
 		// newthread->turnAroundCounter = 0;
 		// newthread->responseTimeCounter = 0;
 		newthread->timeRan = 0;
@@ -158,6 +161,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		makecontext(&(newthread->context), (void*)function, 1, arg);
 
 		//add tcb to runqueue
+		clock_gettime(CLOCK_REALTIME,&(newthread->arrivetime));
 		if(PSJF){
 			enqueue(newthread);
 		}else{
@@ -167,7 +171,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		//switch to scheduler context and run thread based on scheduling protocol
 		//continue building runqueue or regular execution
 
-		swapcontext(&(main->context), &schedulerctx);
+		swapcontext(&(main_tcb->context), &schedulerctx);
 	   }
 	
     return 0;
@@ -199,6 +203,9 @@ void worker_exit(void *value_ptr) {
 	uint id = currThread->id;
 	finishedThreads[id] = true;
 	tot_thread_fin++;
+
+
+	clock_gettime(CLOCK_REALTIME,&(currThread->fintime));
 
 	//collect any info about turnaround, response, or quantum counter before de-alloc
 
@@ -237,10 +244,12 @@ int worker_mutex_init(worker_mutex_t *mutex,
 	//- initialize data structures for this mutex
 
 	// YOUR CODE HERE
+	mutex = malloc(sizeof(worker_mutex_t));
 	mutex->lock = false;
     mutex->thread = NULL;
- 	mutex->mutexQueneHead = malloc(sizeof(struct Node));
-	mutex->mutexQueneHead->data = NULL;
+	mutex->mutexQueueHead = NULL;
+ 	// mutex->mutexQueneHead = malloc(sizeof(struct Node));
+	// mutex->mutexQueneHead->data = NULL;
 
 	return 0;
 };
@@ -256,52 +265,39 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
         // YOUR CODE HERE
 		/*
 In C, the _sync_lock_test_and_set (or __sync_lock_test_and_set in some compilers) is a built-in function used for atomic operations on variables, 
-primarily in the context of multi-threaded programming to ensure that shared data is accessed safely. This function is often used in low-level programming when 
+primarily in the context of multi-threaded programming to ensure that shared data is accessed safely. 
+This function is often used in low-level programming when 
 you need to perform atomic operations without relying on higher-level synchronization mechanisms like mutexes or semaphores.
 
 Here mutex->lock will automatically be set to false. 
 */
-		while(__sync_lock_test_and_set(&( mutex->lock), true))
-		{
-			if(mutex->thread == currThread) 
-			{
-				return 0;
-			}
-		}
+		enum boolean check = __sync_lock_test_and_set(&(mutex->lock), true);
 
-		mutex->thread->status = READY;
+		if(check == false){
+			//mutex->lock = true
+			mutex->thread = currThread;
 
-
-		 if(mutex->mutexQueneHead == NULL)
-		 {
-			 mutex->mutexQueneHead->data = currThread;
-			 mutex->mutexQueneHead->next = NULL;
-		 }
-		 else
-		 {
-			struct Node *newNode = malloc(sizeof(struct Node));			
+		}else{//check was true; lock is previosly held by another thread
+			//enqueue currThread on mutex queue and NOT back on sched queue
+			//swap back to sched context
+			struct Node *newNode = malloc(sizeof(struct Node));
 			newNode->data = currThread;
-			struct Node*ptr =  mutex->mutexQueneHead;
+			newNode->next = NULL;
+			struct Node *ptr =  mutex->mutexQueueHead;
 
-			int loop = 1;
-			while(loop==1)
-			{
-				if(ptr->next==NULL)
-				{
-					ptr->next = newNode;
-					newNode->next=NULL;
-					loop = 0;
-				}
-				ptr=ptr->next;
+			while(ptr->next != NULL){
+				ptr = ptr->next;
 			}
-		//	dequeue(currThread);
-			// int x = worker_mutex_yield();
-		 }
 
+			ptr->next = newNode;
 
-		mutex->thread = currThread;
-		
-		
+			currThread->status = READY;
+
+			currThread = NULL;
+
+			swapcontext(&(newNode->data->context), &schedulerctx);
+		}
+	
         return 0;
 };
 
@@ -312,21 +308,27 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// so that they could compete for mutex later.
 
 	// YOUR CODE HERE
-	if(mutex->mutexQueneHead == NULL)
-	{
-		mutex->lock = false;
-	}
-	else
-	{
-		struct Node *ptr = mutex->mutexQueneHead;
-		mutex->mutexQueneHead = mutex->mutexQueneHead->next;
+	__sync_lock_release(&(mutex->lock));
+
+	//check if anything in queue
+	//if so put first thread in mutex queue in sched queue
+	if(mutex->mutexQueueHead != NULL){
+		struct Node *ptr = mutex->mutexQueueHead;
+		tcb *waitingThread = mutex->mutexQueueHead->data;
+		mutex->mutexQueueHead = mutex->mutexQueueHead->next;
 		free(ptr);
 
-		mutex->mutexQueneHead->data->status = RUNNING;
-		mutex->thread = mutex->mutexQueneHead->data;
+		if(PSJF){//if PSJF policy
+
+			enqueue(waitingThread);
 		
-	//Pretty sure im missing a vital line at the end. Not sure if it is dequeing something, or going back to scheduler or what. 
+		}else{//MLFQ policy
+			menqueue(waitingThread);
+		}
 	}
+
+	mutex->thread = NULL;	
+
 	return 0;
 };
 
@@ -334,7 +336,13 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex) {
 	// - de-allocate dynamic memory created in worker_mutex_init
-	free(mutex->mutexQueneHead);
+
+	//check if mutex is currently locked and if so send -1
+	if(mutex->lock == true) return -1;
+
+	if(mutex->thread != NULL || mutex->mutexQueueHead != NULL) return -1;
+
+	free(mutex);
 
 	return 0;
 };
@@ -391,14 +399,18 @@ static void schedule() {
 		//swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
 	}
 
-	while(runqueuehead!= NULL)//might need to change run condition
-	{
 		if(PSJF){
-			sched_psjf();
-			swapcontext(&schedulerctx, &currThread->context);
-			if(currThread!=NULL)
-			{
-				enqueue(currThread);
+			while(runqueuehead != NULL){
+				sched_psjf();
+				if(currThread->fstsched == false){
+					clock_gettime(CLOCK_REALTIME,&(currThread->firstsched));
+					currThread->fstsched == true;
+				}
+				swapcontext(&schedulerctx, &currThread->context);
+				if(currThread!=NULL)
+				{
+					enqueue(currThread);
+				}
 			}
 		}
 		else{
@@ -414,7 +426,6 @@ static void schedule() {
 			// 	}
 			// }
 		}
-	}
 
 	fstrun = true; //if scheduler finished
 
@@ -454,7 +465,7 @@ static void sched_psjf() {
 			// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
 			ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
 			ptr3->data->status = RUNNING; 
-			currThread  = dequeue(ptr3->data);
+			currThread  = dequeue(ptr3->data->id);
 			return;
 		}
 
@@ -472,7 +483,7 @@ static void sched_psjf() {
 		// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
 		// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
 		ptr3->data->status = RUNNING;
-		currThread = dequeue(ptr3->data);
+		currThread = dequeue(ptr3->data->id);
 		//swapcontext(&schedulerctx, &tcbPtr->context);
 
 	}
@@ -530,7 +541,7 @@ void enqueue(tcb *thread){//insert tcb at end of runqueue
 
 }
 
-tcb* dequeue(tcb* thread){//delete node with specific thread tcb
+tcb* dequeue(worker_t threadid){//delete node with specific thread tcb
 //return tcb to caller func 
 	tot_cntx_switches++;
 	struct Node *ptr = runqueuehead;
@@ -542,7 +553,7 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 	{
 		return NULL; 
 	}
-	if(ptr->data == thread)
+	if(ptr->data->id == threadid)
 	{
 		runqueuehead = runqueuehead->next;
 		returnthread = ptr->data;
@@ -554,7 +565,7 @@ tcb* dequeue(tcb* thread){//delete node with specific thread tcb
 	while(1)
 	{
 		ptr2=ptr2->next;
-		if(ptr2->data == thread)
+		if(ptr2->data->id == threadid)
 		{
 			ptr->next = ptr2->next;
 			returnthread = ptr2->data;
