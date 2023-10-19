@@ -60,11 +60,12 @@ typedef struct TCB {
 	int priority;
 	// And more ...
 	int quantumCounter; //This variable is meant to be incremented everytime the thread has run for quantum.
-	//int turnAroundCounter; //This variable is incremented every single quantum that happens in total since
-						  //it is first added to the Quene, until the thread is finished. 
-	//int responseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
-							//it is added into the Quene and has NOT been scheduled yet. 
+	// int turnAroundCounter; //This variable is incremented every single quantum that happens in total since
+	// 					  //it is first added to the Quene, until the thread is finished. 
+	// int responseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
+	// 						//it is added into the Quene and has NOT been scheduled yet. 
 	int timeRan;
+	enum boolean fstsched;
 	struct timespec firstsched;
 	struct timespec fintime;
 	struct timespec arrivetime;
@@ -80,7 +81,7 @@ typedef struct worker_mutex_t {
 	/* add something here */
 	// YOUR CODE HERE
 	tcb *thread;
-	struct Node *mutexQueneHead; 
+	struct Node *mutexQueueHead; 
 	enum boolean lock;
 } worker_mutex_t;
 
@@ -98,7 +99,7 @@ struct Node {
 };
 
 void enqueue(tcb *thread); //insert tcb at end of runqueue
-tcb* dequeue(tcb *thread); //delete specific tcb
+tcb* dequeue(worker_t threadid); //delete specific tcb
 
 void menqueue(tcb *thread); //insert tcb for MLFQ
 tcb* mdequeue(tcb *thread); //dequeue tcb for MLFQ
