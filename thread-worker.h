@@ -60,9 +60,9 @@ typedef struct TCB {
 	int priority;
 	// And more ...
 	int quantumCounter; //This variable is meant to be incremented everytime the thread has run for quantum.
-	int turnAroundCounter; //This variable is incremented every single quantum that happens in total since
+	//int turnAroundCounter; //This variable is incremented every single quantum that happens in total since
 						  //it is first added to the Quene, until the thread is finished. 
-	int responseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
+	//int responseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
 							//it is added into the Quene and has NOT been scheduled yet. 
 	int timeRan;
 	struct timespec firstsched;
