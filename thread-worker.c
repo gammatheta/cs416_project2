@@ -52,8 +52,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		newthread->priority = 0;
 		newthread->status = READY;
 		newthread->quantumCounter = 0;
-		newthread->turnAroundCounter = 0;
-		newthread->responseTimeCounter = 0;
+		// newthread->turnAroundCounter = 0;
+		// newthread->responseTimeCounter = 0;
 		newthread->timeRan = 0;
 		
 		if (getcontext(&(newthread->context)) < 0){
@@ -82,8 +82,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		main->priority = 0;
 		main->status = READY;
 		main->quantumCounter = 0;
-		main->turnAroundCounter = 0;
-		main->responseTimeCounter = 0;
+		// main->turnAroundCounter = 0;
+		// main->responseTimeCounter = 0;
 		main->timeRan = 0;
 
 		if (getcontext(&(main->context)) < 0){
@@ -138,8 +138,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		newthread->priority = 0;
 		newthread->status = READY;
 		newthread->quantumCounter = 0;
-		newthread->turnAroundCounter = 0;
-		newthread->responseTimeCounter = 0;
+		// newthread->turnAroundCounter = 0;
+		// newthread->responseTimeCounter = 0;
 		newthread->timeRan = 0;
 		
 		if (getcontext(&(newthread->context)) < 0){
@@ -432,8 +432,8 @@ static void sched_psjf() {
 	while(ptr!=NULL)
 	{
 		
-		ptr->data->turnAroundCounter = ptr->data->turnAroundCounter+1;
-		ptr->data->responseTimeCounter = ptr->data->responseTimeCounter+1;
+		// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter+1;
+		// ptr->data->responseTimeCounter = ptr->data->responseTimeCounter+1;
 		ptr = ptr->next;
 	}
 	//ptr = runquenehead; 
@@ -450,8 +450,8 @@ static void sched_psjf() {
 		//minQc = ptr->data->quantumCounter;
 		if(minQc == 0)
 		{
-			ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
-			ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
+			// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
+			// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
 			ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
 			ptr3->data->status = RUNNING; 
 			currThread  = dequeue(ptr3->data);
@@ -469,8 +469,8 @@ static void sched_psjf() {
 	if(minQc != -1)
 	{
 		ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
-		ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
-		ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
+		// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
+		// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
 		ptr3->data->status = RUNNING;
 		currThread = dequeue(ptr3->data);
 		//swapcontext(&schedulerctx, &tcbPtr->context);
