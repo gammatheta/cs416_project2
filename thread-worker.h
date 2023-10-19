@@ -4,7 +4,6 @@
 // username of iLab:
 // iLab Server:
 
-// Line 59 
 #ifndef WORKER_T_H
 #define WORKER_T_H
 
@@ -16,7 +15,19 @@
 #define READY 0
 #define RUNNING 1
 #define BLOCKED 2
-#define Quantum 10
+#define QUANTUM 10
+#define MAXTHREADS 256
+#define NUM_QUEUES 4
+#define RESET (QUANTUM * 10)
+
+// - schedule policy
+#ifndef MLFQ
+	// Choose PSJF
+#define PSJF 1
+#else 
+	// Choose MLFQ
+#define MLFQ 1
+#endif
 
 /* Include enums or other helpful types */
 enum boolean {false, true};
@@ -29,6 +40,9 @@ enum boolean {false, true};
 #include <stdlib.h>
 #include <ucontext.h>
 #include <signal.h>
+#include <sys/time.h>
+#include <string.h>
+#include <time.h>
 
 typedef uint worker_t;
 
@@ -43,23 +57,32 @@ typedef struct TCB {
 	// thread stack
 	void *stack;
 	// thread priority
+	int priority;
 	// And more ...
-	int QuantumCounter; //This variable is meant to be incremented everytime the thread has run for quantum.
-	int TurnAroundCounter; //This variable is incremented every single quantum that happens in total since
+	int quantumCounter; //This variable is meant to be incremented everytime the thread has run for quantum.
+	int turnAroundCounter; //This variable is incremented every single quantum that happens in total since
 						  //it is first added to the Quene, until the thread is finished. 
-	int ResponseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
+	int responseTimeCounter; //This variable is incremented for every quantum the thread has to wait after
 							//it is added into the Quene and has NOT been scheduled yet. 
+	int timeRan;
+	struct timespec firstsched;
+	struct timespec fintime;
+	struct timespec arrivetime;
 
 	// Possible add metrics for completion time, arrival time, 
 	// first run time, number of context switches for per thread TCB
 	// 
-
 	// YOUR CODE HERE
 } tcb; 
 
-
-
-
+/* mutex struct definition */
+typedef struct worker_mutex_t {
+	/* add something here */
+	// YOUR CODE HERE
+	tcb *thread;
+	struct Node *mutexQueneHead; 
+	enum boolean lock;
+} worker_mutex_t;
 
 /* define your data structures here: */
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
@@ -74,23 +97,11 @@ struct Node {
     struct Node *next; // Pointer to the next node
 };
 
-/* mutex struct definition */
-typedef struct worker_mutex_t {
-	/* add something here */
-	tcb *thread;
-	struct Node *mutexQueneHead; 
-	enum boolean lock;
-	// YOUR CODE HERE
-}worker_mutex_t;
-
-
-/*typedef struct mutexNode {
-    mutex *data; // Pointer to the struct
-    struct mutexNode *next; // Pointer to the next node
-}mutexNode;*/
-
 void enqueue(tcb *thread); //insert tcb at end of runqueue
 tcb* dequeue(tcb *thread); //delete specific tcb
+
+void menqueue(tcb *thread); //insert tcb for MLFQ
+tcb* mdequeue(tcb *thread); //dequeue tcb for MLFQ
 
 void handler(int signum);
 
