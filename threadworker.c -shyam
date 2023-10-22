@@ -27,7 +27,7 @@ struct Node* mlfq[NUM_QUEUES]; //array of queues
 double tot_turn_time = 0; //add total of all threads' turnaround time
 double tot_resp_time = 0; //add total of all threads' response time 
 int tot_thread_fin = 0; //add total of all threads that have finished
-worker_mutex_t *my_mutex;
+worker_mutex_t *my_mutex; //keep track of mutex
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -44,7 +44,9 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 	    for(int i = 0; i < MAXTHREADS; i++){
 			finishedThreads[i] = false;
+		
 		}
+		
 
 		tcb *newthread = malloc(sizeof(tcb));
 		newthread->id = idcounter;
@@ -214,10 +216,18 @@ void worker_exit(void *value_ptr) {
 	clock_gettime(CLOCK_REALTIME,&(currThread->fintime));
 
 	//collect any info about turnaround, response, or quantum counter before de-alloc
+	tot_turn_time += ((currThread->fintime.tv_sec - currThread->arrivetime.tv_sec)*1000 + 
+		(currThread->fintime.tv_nsec - currThread->arrivetime.tv_nsec)/1000000); 
+	tot_resp_time += ((currThread->firstsched.tv_sec - currThread->arrivetime.tv_sec)*1000 + 
+		(currThread->firstsched.tv_nsec - currThread->arrivetime.tv_nsec)/1000000); 
+
+	avg_turn_time = tot_turn_time / (double)tot_thread_fin;
+	avg_resp_time = tot_resp_time / (double)tot_thread_fin;
 
 	//free tcb and stack of tcb
 	free(currThread->stack);
 	free(currThread);
+	currThread = NULL;
 	
 };
 
@@ -257,9 +267,9 @@ int worker_mutex_init(worker_mutex_t *mutex,
 	
 	my_mutex = malloc(sizeof(worker_mutex_t));
 	mutex = my_mutex;
-	mutex->lock = false;
-    mutex->thread = NULL;
-	mutex->mutexQueueHead = NULL;
+	my_mutex->lock = false;
+    my_mutex->thread = NULL;
+	my_mutex->mutexQueueHead = NULL;
  	// mutex->mutexQueneHead = malloc(sizeof(struct Node));
 	// mutex->mutexQueneHead->data = NULL;
 
@@ -283,31 +293,46 @@ you need to perform atomic operations without relying on higher-level synchroniz
 
 Here mutex->lock will automatically be set to false. 
 */
-		enum boolean check = __sync_lock_test_and_set(&(mutex->lock), true);
+		enum boolean check = __sync_lock_test_and_set(&(my_mutex->lock), true);
 
 		if(check == false){
 			//mutex->lock = true
-			mutex->thread = currThread;
+			my_mutex->thread = currThread;
 
 		}else{//check was true; lock is previosly held by another thread
 			//enqueue currThread on mutex queue and NOT back on sched queue
 			//swap back to sched context
-			struct Node *newNode = malloc(sizeof(struct Node));
-			newNode->data = currThread;
-			newNode->next = NULL;
-			struct Node *ptr =  mutex->mutexQueueHead;
+			if(my_mutex->mutexQueueHead == NULL)
+			{
+				struct Node *start = malloc(sizeof(struct Node));
+				start->data = currThread;
+				start->next = NULL;
+				my_mutex->mutexQueueHead = start;
 
-			while(ptr->next != NULL){
-				ptr = ptr->next;
+				currThread->status = READY;
+
+				currThread = NULL;
+
+				swapcontext(&(start->data->context), &schedulerctx);
+			}else{
+
+				struct Node *newNode = malloc(sizeof(struct Node));
+				newNode->data = currThread;
+				newNode->next = NULL;
+				struct Node *ptr =  my_mutex->mutexQueueHead;
+
+				while(ptr->next != NULL){
+					ptr = ptr->next;
+				}
+
+				ptr->next = newNode;
+
+				currThread->status = READY;
+
+				currThread = NULL;
+
+				swapcontext(&(newNode->data->context), &schedulerctx);
 			}
-
-			ptr->next = newNode;
-
-			currThread->status = READY;
-
-			currThread = NULL;
-
-			swapcontext(&(newNode->data->context), &schedulerctx);
 		}
 	
         return 0;
@@ -320,14 +345,14 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// so that they could compete for mutex later.
 
 	// YOUR CODE HERE
-	__sync_lock_release(&(mutex->lock));
+	__sync_lock_release(&(my_mutex->lock));
 
 	//check if anything in queue
 	//if so put first thread in mutex queue in sched queue
-	if(mutex->mutexQueueHead != NULL){
-		struct Node *ptr = mutex->mutexQueueHead;
-		tcb *waitingThread = mutex->mutexQueueHead->data;
-		mutex->mutexQueueHead = mutex->mutexQueueHead->next;
+	if(my_mutex->mutexQueueHead != NULL){
+		struct Node *ptr = my_mutex->mutexQueueHead;
+		tcb *waitingThread = my_mutex->mutexQueueHead->data;
+		my_mutex->mutexQueueHead = my_mutex->mutexQueueHead->next;
 		free(ptr);
 
 		if(PSJF){//if PSJF policy
@@ -339,7 +364,7 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 		}
 	}
 
-	mutex->thread = NULL;	
+	my_mutex->thread = NULL;	
 
 	return 0;
 };
@@ -350,9 +375,9 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
 	// - de-allocate dynamic memory created in worker_mutex_init
 
 	//check if mutex is currently locked and if so send -1
-	if(mutex->lock == true) return -1;
+	if(my_mutex->lock == true) return -1;
 
-	if(mutex->thread != NULL || mutex->mutexQueueHead != NULL) return -1;
+	if(my_mutex->thread != NULL || my_mutex->mutexQueueHead != NULL) return -1;
 
 	free(my_mutex);
 
@@ -373,6 +398,7 @@ static void schedule() {
 	// 		sched_mlfq();
 
 	// YOUR CODE HERE
+	tcb *librarian;
 
 	if(fstrun){//first run of scheduler
 		/* Set up runqueue data structure (queue) 
@@ -397,11 +423,11 @@ static void schedule() {
 		struct itimerval timer;
 
 		// // Set up what the timer should reset to after the timer goes off
-		timer.it_interval.tv_usec = 0; 
-		timer.it_interval.tv_sec = 1;
+		timer.it_interval.tv_usec = QUANTUM; 
+		timer.it_interval.tv_sec = 0;
 
-		timer.it_value.tv_usec = 0;
-		timer.it_value.tv_sec = 1;
+		timer.it_value.tv_usec = QUANTUM;
+		timer.it_value.tv_sec = 0;
 
 		// // Set the timer up (start the timer)
 		setitimer(ITIMER_PROF, &timer, NULL);
@@ -412,21 +438,24 @@ static void schedule() {
 	}
 
 		if(PSJF){
-			while(runqueuehead != NULL){
+			// while(runqueuehead != NULL){
+				while(1){
 				sched_psjf();
 				if(currThread->fstsched == false){
 					clock_gettime(CLOCK_REALTIME,&(currThread->firstsched));
-					currThread->fstsched == true;
+					currThread->fstsched = true;
 				}
 				swapcontext(&schedulerctx, &currThread->context);
-				if(currThread!=NULL)
+				librarian = currThread;
+				if(librarian!=NULL)
 				{
-					enqueue(currThread);
+					enqueue(librarian);
 				}
 			}
 		}
 		else{
-			sched_mlfq();
+			while(1){
+				sched_mlfq();
 
 			// int timeslice = 0;
 
@@ -437,9 +466,10 @@ static void schedule() {
 			// 		thread->priority = thread->priority + 1;
 			// 	}
 			// }
+			}
 		}
 
-	fstrun = true; //if scheduler finished
+	//fstrun = true; //if scheduler finished
 
 }
 
