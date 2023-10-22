@@ -27,6 +27,7 @@ struct Node* mlfq[NUM_QUEUES]; //array of queues
 double tot_turn_time = 0; //add total of all threads' turnaround time
 double tot_resp_time = 0; //add total of all threads' response time 
 int tot_thread_fin = 0; //add total of all threads that have finished
+worker_mutex_t *my_mutex;
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -94,7 +95,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 		//Set up scheduler
 		//swapcontext(&mainctx, &schedulerctx); //after swapcontext returns from scheduler, will go to next line
-		schedule();
+		//schedule();
+		swapcontext(&(main_tcb->context), &schedulerctx);
 
 		/* Setup context that we are going to use */
 		newthread->stack = malloc(STACK_SIZE);
@@ -201,6 +203,10 @@ void worker_exit(void *value_ptr) {
 	//assuming current running thread is correctly designated
 	//mark which thread finished
 	uint id = currThread->id;
+
+	if(currThread->id == main_tcb->id) return;//if main is exiting, then just return to main
+	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
+
 	finishedThreads[id] = true;
 	tot_thread_fin++;
 
@@ -212,6 +218,7 @@ void worker_exit(void *value_ptr) {
 	//free tcb and stack of tcb
 	free(currThread->stack);
 	free(currThread);
+	currThread = NULL;
 	
 };
 
@@ -228,6 +235,10 @@ int worker_join(worker_t thread, void **value_ptr) {
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
 	uint id = thread;
+
+	if(id == main_tcb->id) return 0;// main trying to join itself
+	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
+
 	while(finishedThreads[id] != true){//while param thread not finished, yield CPU since don't need to continue running
 		int waiting = worker_yield();
 	}
@@ -244,7 +255,9 @@ int worker_mutex_init(worker_mutex_t *mutex,
 	//- initialize data structures for this mutex
 
 	// YOUR CODE HERE
-	mutex = malloc(sizeof(worker_mutex_t));
+	
+	my_mutex = malloc(sizeof(worker_mutex_t));
+	mutex = my_mutex;
 	mutex->lock = false;
     mutex->thread = NULL;
 	mutex->mutexQueueHead = NULL;
@@ -342,7 +355,7 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
 
 	if(mutex->thread != NULL || mutex->mutexQueueHead != NULL) return -1;
 
-	free(mutex);
+	free(my_mutex);
 
 	return 0;
 };
@@ -394,17 +407,18 @@ static void schedule() {
 		// // Set the timer up (start the timer)
 		setitimer(ITIMER_PROF, &timer, NULL);
 
-		return;
+		swapcontext(&schedulerctx, &(main_tcb->context));;
 
 		//swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
 	}
 
 		if(PSJF){
-			while(runqueuehead != NULL){
+			// while(runqueuehead != NULL){
+				while(1){
 				sched_psjf();
 				if(currThread->fstsched == false){
 					clock_gettime(CLOCK_REALTIME,&(currThread->firstsched));
-					currThread->fstsched == true;
+					currThread->fstsched = true;
 				}
 				swapcontext(&schedulerctx, &currThread->context);
 				if(currThread!=NULL)
@@ -414,7 +428,8 @@ static void schedule() {
 			}
 		}
 		else{
-			sched_mlfq();
+			while(1){
+				sched_mlfq();
 
 			// int timeslice = 0;
 
@@ -425,9 +440,10 @@ static void schedule() {
 			// 		thread->priority = thread->priority + 1;
 			// 	}
 			// }
+			}
 		}
 
-	fstrun = true; //if scheduler finished
+	//fstrun = true; //if scheduler finished
 
 }
 
@@ -466,6 +482,7 @@ static void sched_psjf() {
 			ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
 			ptr3->data->status = RUNNING; 
 			currThread  = dequeue(ptr3->data->id);
+			printf("currThread is id %d\n", currThread->id);
 			return;
 		}
 
@@ -484,6 +501,7 @@ static void sched_psjf() {
 		// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
 		ptr3->data->status = RUNNING;
 		currThread = dequeue(ptr3->data->id);
+		printf("currThread is id %d\n", currThread->id);
 		//swapcontext(&schedulerctx, &tcbPtr->context);
 
 	}
