@@ -480,62 +480,31 @@ static void sched_psjf() {
 
 	// YOUR CODE HERE
 	struct Node* ptr = runqueuehead;
-	struct Node* ptr2 = runqueuehead;
-	struct Node* ptr3 = runqueuehead;
-	while(ptr!=NULL)
-	{
-		
-		// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter+1;
-		// ptr->data->responseTimeCounter = ptr->data->responseTimeCounter+1;
+	if(ptr == NULL){
+		return;
+	}
+
+	int minQcount = ptr->data->quantumCounter;
+
+	//allocate id to default of first in queue
+	worker_t id = ptr->data->id;
+
+	//iterate thru entire list to find lowest quantum counter
+	while(ptr != NULL){
+		if(ptr->data->status != BLOCKED && minQcount > ptr->data->quantumCounter){
+			id = ptr->data->id;
+			minQcount = ptr->data->quantumCounter;
+		}
 		ptr = ptr->next;
 	}
-	//ptr = runquenehead; 
 
-	int minQc = -1;
-	if(ptr2->data->status != BLOCKED)
-	{
-		 minQc = ptr2->data->quantumCounter;
-	}
+	//dequeue specfic thread with lowest quantum counter
+	currThread = dequeue(id);
+	printf("currThread is %d\n", id);
+	currThread->quantumCounter++;
+	currThread->status = RUNNING;
 
-	ptr2 = ptr2->next;
-	while(ptr2!=NULL)
-	{
-		//minQc = ptr->data->quantumCounter;
-		if(minQc == 0)
-		{
-			// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
-			// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
-			ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
-			ptr3->data->status = RUNNING; 
-			currThread  = dequeue(ptr3->data->id);
-			printf("currThread is id %d\n", currThread->id);
-			return;
-		}
-
-		if((minQc == -1  && ptr2->data->status!=BLOCKED) || (minQc>ptr2->data->quantumCounter && ptr2->data->status!=BLOCKED))
-		{
-			minQc = ptr2->data->quantumCounter;
-			ptr3 = ptr2;
-		}
-		ptr2 = ptr2->next;
-
-	}
-	if(minQc != -1)
-	{
-		ptr3->data->quantumCounter = ptr3->data->quantumCounter+1;
-		// ptr->data->turnAroundCounter = ptr->data->turnAroundCounter-1;
-		// ptr3->data->responseTimeCounter = ptr3->data->responseTimeCounter-1;
-		ptr3->data->status = RUNNING;
-		currThread = dequeue(ptr3->data->id);
-		printf("currThread is id %d\n", currThread->id);
-		//swapcontext(&schedulerctx, &tcbPtr->context);
-
-	}
-	else
-	{
-		printf("Everything is blocked.");
-	}
-	//Need to turn the thread of ptr3;
+	return;
 }
 
 
