@@ -618,11 +618,11 @@ void menqueue(tcb *thread){ //enqueue for MLFQ
 
 }
 
-tcb* mdequeue(tcb *thread){ //dequeue for MLFQ
+tcb* mdequeue(worker_t threadid, int priority){ //dequeue for MLFQ
 	//return tcb to caller func 
 	tot_cntx_switches++;
-	struct Node *ptr = mlfq[thread->priority];
-	struct Node *ptr2 = mlfq[thread->priority];
+	struct Node *ptr = mlfq[priority];
+	struct Node *ptr2 = mlfq[priority];
 	struct Node *temp;
 
 	tcb *returnthread;
@@ -631,10 +631,10 @@ tcb* mdequeue(tcb *thread){ //dequeue for MLFQ
 	{
 		return NULL; 
 	}
-	if(ptr->data == thread)
+	if(ptr->data->id == threadid)
 	{
 		temp = ptr;
-		mlfq[thread->priority] = mlfq[thread->priority]->next;
+		mlfq[priority] = mlfq[priority]->next;
 		returnthread = ptr->data;
 		free(temp);
 		return returnthread;
@@ -643,7 +643,7 @@ tcb* mdequeue(tcb *thread){ //dequeue for MLFQ
 	while(1)
 	{
 		ptr2=ptr2->next;
-		if(ptr2->data == thread)
+		if(ptr2->data->id == threadid)
 		{
 			ptr->next = ptr2->next;
 			returnthread = ptr2->data;
@@ -654,63 +654,24 @@ tcb* mdequeue(tcb *thread){ //dequeue for MLFQ
 	}
 }
 
-/*void mutexEnqueue(mutex *mutex){//insert tcb at end of runqueue
-//make new node and then add thread to node->data
+void resetthreads(){//move all queues up to highest priority level
+	//reset all timeRan and change priority levels
+	tcb *movingThread;
+	struct Node *ptr;
+	for(int i = NUM_QUEUES -1; i < 0; i--){//start from lowest queue and go up
+		ptr = mlfq[i];
+		while(ptr != NULL){//queue level not empty
+			//choose first thread in queue level
+			id = ptr->data->id;
+			movingThread = mdequeue(id, i);
+			movingThread->priority = 0;
+			movingThread->timeRan = 0;
+			menqueue(movingThread);
 
-	if(mutexQueneHead == NULL)
-	{
-		mutexQueneHead->data = mutex;
-		mutexQueneHead->next = NULL;
-		return;
-	}
-		struct mutexNode *newmutexNode = malloc(sizeof(struct mutexNode));	
-		mutexNode->data = mutex;
-		mutexNode->next = NULL;
-
-		struct mutexNode *ptr = mutexQueneHead;
-
-		while(ptr->next != NULL){
 			ptr = ptr->next;
 		}
-
-		ptr->next = newmutexNode;
-
+	}
 }
-
-void mutexDequeue(tcb* mutex){//delete node with specific thread tcb
-//return tcb to caller func 
-
-	struct mutexNode *ptr = mutexQueneHead;
-	struct mutexNode *ptr2 = mutexQueneHead;
-
-	if(ptr == NULL)
-	{
-		return NULL; 
-	}
-	if(ptr->data == mutex)
-	{
-		mutexQueneHead = mutexQueneHead->next;
-		enqueue(ptr->mutex->data->thread);
-		free(ptr);
-		//free(ptr2);
-		//return thread;
-	}
-
-	while(1)
-	{
-		ptr2=ptr2->next;
-		if(ptr2->data == thread)
-		{
-			ptr = ptr2->next;
-			enqueue(ptr2->mutex->data->thread);
-			free(ptr2);
-			//return thread;
-		}
-		ptr = ptr->next;
-	}
-
-
-}*/
 
 
 void handler(int signum){//signal handler
