@@ -514,6 +514,20 @@ static void sched_mlfq() {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+	//assume all threads in correct priority levels 
+	//search for highest priority thread
+	worker_t id;
+	struct Node *ptr;
+	
+	for(int i = 0; i < NUM_QUEUES; i++){//iterate thru each priority level
+		ptr = mlfq[i];
+		if(ptr != NULL){//queue level not empty
+			//choose first thread in queue level
+			id = ptr->data->id;
+			currThread = mdequeue(id, i);
+			return;
+		}
+	}
 }
 
 //DO NOT MODIFY THIS FUNCTION
