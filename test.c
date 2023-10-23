@@ -22,7 +22,7 @@ int sum = 0;
 
 void checker(void *arg){
 
-	for(int i = 0; i < 300; i++){
+	for(int i = 0; i < 400000; i++){
 		pthread_mutex_lock(&mutex);
 		sum++;
 		pthread_mutex_unlock(&mutex);	
