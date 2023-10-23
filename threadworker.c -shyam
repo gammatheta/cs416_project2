@@ -12,6 +12,15 @@ long tot_cntx_switches=0;
 double avg_turn_time=0;
 double avg_resp_time=0;
 
+// - schedule policy
+#ifndef MLFQ
+	// Choose PSJF
+#define PSJF 1
+#else 
+	// Choose MLFQ
+#define MLFQ 1
+#endif
+
 
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
@@ -23,6 +32,7 @@ enum boolean fstrun = true; //first run global variable
 struct Node *runqueuehead; //PSJF runqueue head pointer
 tcb *currThread; //current running thread
 enum boolean finishedThreads[MAXTHREADS]; //manages which thread has finished (true) and which are not (false)
+// int threadids[MAXTHREADS]; //array of all thread ids
 struct Node* mlfq[NUM_QUEUES]; //array of queues
 double tot_turn_time = 0; //add total of all threads' turnaround time
 double tot_resp_time = 0; //add total of all threads' response time 
@@ -44,12 +54,14 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 	    for(int i = 0; i < MAXTHREADS; i++){
 			finishedThreads[i] = false;
-		
+			// threadids[i] = i;
 		}
 		
 
 		tcb *newthread = malloc(sizeof(tcb));
 		newthread->id = idcounter;
+		// thread = &(threadids[idcounter]); //try
+
 		thread = &(newthread->id); //unsure if works
 		idcounter++;
 		newthread->priority = 0;
@@ -120,13 +132,15 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		//clock_gettime(CLOCK_REALTIME, &start);		
 		clock_gettime(CLOCK_REALTIME,&(newthread->arrivetime));
 
-		if(PSJF){
+		#ifndef MLFQ 
+			//run PSJF
 			enqueue(newthread);
 			enqueue(main_tcb);
-		}else{
+		#else
+			//run MLFQ
 			menqueue(newthread);
 			menqueue(main_tcb);
-		}
+		#endif
 		
 
 		fstrun = false;
@@ -139,6 +153,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	   }else{//if not the first run of worker_create function
 		tcb *newthread = malloc(sizeof(tcb));
 		newthread->id = idcounter;
+		// thread = &(threadids[idcounter]); //try
 		thread = &(newthread->id); //unsure if works
 		idcounter++;
 		newthread->priority = 0;
@@ -166,11 +181,11 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 		//add tcb to runqueue
 		clock_gettime(CLOCK_REALTIME,&(newthread->arrivetime));
-		if(PSJF){
+		#ifndef MLFQ
 			enqueue(newthread);
-		}else{
+		#else
 			menqueue(newthread);
-		}
+		#endif
 	
 		//switch to scheduler context and run thread based on scheduling protocol
 		//continue building runqueue or regular execution
@@ -207,6 +222,7 @@ void worker_exit(void *value_ptr) {
 	uint id = currThread->id;
 
 	if(currThread->id == main_tcb->id) return;//if main is exiting, then just return to main
+	//SHOULD NOT HAPPEN
 	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
 
 	finishedThreads[id] = true;
@@ -243,12 +259,15 @@ int worker_join(worker_t thread, void **value_ptr) {
 	/* currThread is waiting for thread with thread id (worker_t thread) to finish */
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
-	uint id = thread;
+	printf("currThread %d trying to join id %d\n", currThread->id, thread);
+	if(currThread->id == 0) return 0;
 
-	if(id == main_tcb->id) return 0;// main trying to join itself
+	if(thread == currThread->id) return -1; //calling thread joining itself
+
+	//SHOULD NOT HAPPEN
 	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
 
-	while(finishedThreads[id] != true){//while param thread not finished, yield CPU since don't need to continue running
+	while(finishedThreads[thread] != true){//while param thread not finished, yield CPU since don't need to continue running
 		int waiting = worker_yield();
 	}
 
@@ -285,14 +304,6 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
         // context switch to the scheduler thread
 
         // YOUR CODE HERE
-		/*
-In C, the _sync_lock_test_and_set (or __sync_lock_test_and_set in some compilers) is a built-in function used for atomic operations on variables, 
-primarily in the context of multi-threaded programming to ensure that shared data is accessed safely. 
-This function is often used in low-level programming when 
-you need to perform atomic operations without relying on higher-level synchronization mechanisms like mutexes or semaphores.
-
-Here mutex->lock will automatically be set to false. 
-*/
 		enum boolean check = __sync_lock_test_and_set(&(my_mutex->lock), true);
 
 		if(check == false){
@@ -355,13 +366,15 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 		my_mutex->mutexQueueHead = my_mutex->mutexQueueHead->next;
 		free(ptr);
 
-		if(PSJF){//if PSJF policy
+		#ifndef MLFQ
+			//if PSJF policy
 
 			enqueue(waitingThread);
 		
-		}else{//MLFQ policy
+		#else
+			//MLFQ policy
 			menqueue(waitingThread);
-		}
+		#endif
 	}
 
 	my_mutex->thread = NULL;	
@@ -399,37 +412,31 @@ static void schedule() {
 
 	// YOUR CODE HERE
 	tcb *librarian;
+	struct timespec startt,endt,startr,endr;
+	double timeslice, resettime;
 
 	if(fstrun){//first run of scheduler
 		/* Set up runqueue data structure (queue) 
 		*  if MLFQ need multiple; if PSJF need only one 
 		*  successive calls will require to make nodes in worker_create and add tcb to runqueue
 		*/
-		if(PSJF){
-			
-			//check if need anything else for this (ie call sched_psjf())
-
-		}else{//set up MLFQ
-
-		}
-
-		// // Use sigaction to register signal handler
+		// Use sigaction to register signal handler
 		struct sigaction sa;
 		memset(&sa, 0, sizeof (sa));
 		sa.sa_handler = &handler;
 		sigaction(SIGPROF, &sa, NULL);
 
-		// // Create timer struct
+		// Create timer struct
 		struct itimerval timer;
 
-		// // Set up what the timer should reset to after the timer goes off
+		// Set up what the timer should reset to after the timer goes off
 		timer.it_interval.tv_usec = QUANTUM; 
 		timer.it_interval.tv_sec = 0;
 
 		timer.it_value.tv_usec = QUANTUM;
 		timer.it_value.tv_sec = 0;
 
-		// // Set the timer up (start the timer)
+		// Set the timer up (start the timer)
 		setitimer(ITIMER_PROF, &timer, NULL);
 
 		swapcontext(&schedulerctx, &(main_tcb->context));;
@@ -437,9 +444,8 @@ static void schedule() {
 		//swapcontext(&schedulerctx, &mainctx); //return back to worker_create func
 	}
 
-		if(PSJF){
-			// while(runqueuehead != NULL){
-				while(1){
+		#ifndef MLFQ
+			while(1){
 				sched_psjf();
 				if(currThread->fstsched == false){
 					clock_gettime(CLOCK_REALTIME,&(currThread->firstsched));
@@ -452,8 +458,7 @@ static void schedule() {
 					enqueue(librarian);
 				}
 			}
-		}
-		else{
+		#else
 			resettime = 0;
 			while(1){
 				sched_mlfq();//dequeues and finds the thread to run
@@ -495,7 +500,7 @@ static void schedule() {
 				}
 
 			}
-		}
+		#endif
 
 	//fstrun = true; //if scheduler finished
 
@@ -508,6 +513,8 @@ static void sched_psjf() {
 
 	// YOUR CODE HERE
 	struct Node* ptr = runqueuehead;
+	
+	//if runqueue is empty then nothing to run/return
 	if(ptr == NULL){
 		return;
 	}
@@ -533,6 +540,7 @@ static void sched_psjf() {
 	currThread->status = RUNNING;
 
 	return;
+
 }
 
 
@@ -553,6 +561,7 @@ static void sched_mlfq() {
 			//choose first thread in queue level
 			id = ptr->data->id;
 			currThread = mdequeue(id, i);
+			currThread->status = RUNNING;
 			return;
 		}
 	}
