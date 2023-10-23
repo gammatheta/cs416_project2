@@ -454,18 +454,46 @@ static void schedule() {
 			}
 		}
 		else{
+			resettime = 0;
 			while(1){
-				sched_mlfq();
+				sched_mlfq();//dequeues and finds the thread to run
+				//assume QUANTUM in microsec => convert to ms
+				timeslice = (currThread->priority + 1) * (QUANTUM / 1000); //timeslice in ms
+				clock_gettime(CLOCK_REALTIME,&(startt));
+				clock_gettime(CLOCK_REALTIME,&(startr));
 
-			// int timeslice = 0;
+				if(currThread->fstsched == false){
+					clock_gettime(CLOCK_REALTIME,&(currThread->firstsched));
+					currThread->fstsched = true;
+				}
 
-			// timeslice = (thread->priority + 1) * QUANTUM; //for Q0, time slice is 10ms or 1 Quantum
+				swapcontext(&schedulerctx, &currThread->context);
 
-			// if(thread->timeRan >= timeslice){
-			// 	if(thread->priority != (NUM_QUEUES -1)){
-			// 		thread->priority = thread->priority + 1;
-			// 	}
-			// }
+				if(currThread != NULL){//thread not finished
+					clock_gettime(CLOCK_REALTIME,&(endt));
+					clock_gettime(CLOCK_REALTIME,&(endr));
+					//check w/ timeslice and compare to timeran
+					currThread->timeRan += (endt.tv_sec - startt.tv_sec) * 1000 + (endt.tv_nsec - startt.tv_nsec) / 1000000;
+					if(currThread->timeRan >= timeslice){//move down priority and reset timeran
+						if(currThread->priority != (NUM_QUEUES -1)){
+							currThread->priority += 1;
+						}
+						currThread->timeRan = 0;
+					}
+				}
+
+				librarian = currThread;
+				if(librarian != NULL){
+					menqueue(librarian);
+				}
+
+				//check for RESET
+				resettime += (endr.tv_sec - startr.tv_sec) * 1000 + (endr.tv_nsec - startr.tv_nsec) / 1000000;
+				if(resettime >= (RESET / 1000)){//move all threads to top priority
+					resetthreads();
+					resettime = 0;
+				}
+
 			}
 		}
 
