@@ -287,7 +287,7 @@ int worker_join(worker_t thread, void **value_ptr) {
 	/* currThread is waiting for thread with thread id (worker_t thread) to finish */
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
-	printf("currThread %d trying to join id %d\n", currThread->id, thread);
+	//printf("currThread %d trying to join id %d\n", currThread->id, thread);
 	// if(currThread->id == 0) return 0;
 
 	// if(thread == currThread->id) return -1; //calling thread joining itself
@@ -539,7 +539,7 @@ static void sched_psjf() {
 
 	//dequeue specfic thread with lowest quantum counter
 	currThread = dequeue(id);
-	printf("currThread is %d\n", id);
+	//printf("currThread is %d\n", id);
 	currThread->quantumCounter++;
 	currThread->status = RUNNING;
 
@@ -731,6 +731,8 @@ void resetthreads(){//move all queues up to highest priority level
 
 
 void handler(int signum){//signal handler
-	swapcontext(&(currThread->context),&schedulerctx);
+	if(currThread != NULL){
+		swapcontext(&(currThread->context),&schedulerctx);
+	}
 
 }
