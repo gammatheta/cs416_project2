@@ -38,6 +38,8 @@ double tot_turn_time = 0; //add total of all threads' turnaround time
 double tot_resp_time = 0; //add total of all threads' response time 
 int tot_thread_fin = 0; //add total of all threads that have finished
 worker_mutex_t *my_mutex; //keep track of mutex
+// Create timer struct
+		struct itimerval timer;
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -157,9 +159,6 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		memset(&sa, 0, sizeof (sa));
 		sa.sa_handler = &handler;
 		sigaction(SIGPROF, &sa, NULL);
-
-		// Create timer struct
-		struct itimerval timer;
 
 		// Set up what the timer should reset to after the timer goes off
 		timer.it_interval.tv_usec = QUANTUM; 
@@ -287,7 +286,7 @@ int worker_join(worker_t thread, void **value_ptr) {
 	/* currThread is waiting for thread with thread id (worker_t thread) to finish */
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
-	//printf("currThread %d trying to join id %d\n", currThread->id, thread);
+	printf("currThread %d trying to join id %d\n", currThread->id, thread);
 	// if(currThread->id == 0) return 0;
 
 	// if(thread == currThread->id) return -1; //calling thread joining itself
@@ -499,8 +498,12 @@ static void schedule() {
 				//check for RESET
 				resettime += (endr.tv_sec - startr.tv_sec) * 1000 + (endr.tv_nsec - startr.tv_nsec) / 1000000;
 				if(resettime >= (RESET / 1000)){//move all threads to top priority
+					timer.it_value.tv_usec = 0;
+					timer.it_value.tv_sec = 0;
 					resetthreads();
 					resettime = 0;
+					timer.it_value.tv_usec = QUANTUM;
+					timer.it_value.tv_sec = 0;
 				}
 
 			}
@@ -566,6 +569,7 @@ static void sched_mlfq() {
 			id = ptr->data->id;
 			currThread = mdequeue(id, i);
 			currThread->status = RUNNING;
+			printf("currThread is %d\n", id);
 			return;
 		}
 	}
@@ -723,8 +727,9 @@ void resetthreads(){//move all queues up to highest priority level
 			movingThread->priority = 0;
 			movingThread->timeRan = 0;
 			menqueue(movingThread);
+			printf("thread being moved is %d\n", id);
 
-			ptr = ptr->next;
+			ptr = mlfq[i];
 		}
 	}
 }
@@ -732,6 +737,7 @@ void resetthreads(){//move all queues up to highest priority level
 
 void handler(int signum){//signal handler
 	if(currThread != NULL){
+		printf("currThread is %d\n", currThread->id);
 		swapcontext(&(currThread->context),&schedulerctx);
 	}
 
