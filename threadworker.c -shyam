@@ -1,6 +1,7 @@
 // File:	thread-worker.c
 
-// List all group member's name:
+// List all group member's name: Sakthidharran Rajkumar
+//NETID: sr1493
 // username of iLab:
 // iLab Server:
 
@@ -287,18 +288,12 @@ int worker_join(worker_t thread, void **value_ptr) {
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
 	//printf("currThread %d trying to join id %d\n", currThread->id, thread);
-	// if(currThread->id == 0) return 0;
-
-	// if(thread == currThread->id) return -1; //calling thread joining itself
-
-	//SHOULD NOT HAPPEN
-	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
-	int cnt=0;
+	// int cnt=0;
 
 	while(finishedThreads[thread] != true){//while param thread not finished, yield CPU since don't need to continue running
-		int waiting = worker_yield();
-		cnt++;
-		if(cnt == 3) currThread->priority = NUM_QUEUES -1;
+		// int waiting = worker_yield();
+		// cnt++;
+		// if(cnt == 3) currThread->priority = NUM_QUEUES -1;
 	}
 
 	//param thread finished and can exit out of calling (currThread) thread
