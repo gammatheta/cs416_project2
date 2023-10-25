@@ -499,10 +499,13 @@ static void schedule() {
 				if(resettime >= (RESET / 1000)){//move all threads to top priority
 					timer.it_value.tv_usec = 0;
 					timer.it_value.tv_sec = 0;
+					setitimer(ITIMER_PROF, &timer, NULL);
 					resetthreads();
 					resettime = 0;
 					timer.it_value.tv_usec = QUANTUM;
 					timer.it_value.tv_sec = 0;
+					// Set the timer up (start the timer)
+					setitimer(ITIMER_PROF, &timer, NULL);
 				}
 
 			}
