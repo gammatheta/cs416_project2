@@ -448,6 +448,7 @@ static void schedule() {
 					currThread->fstsched = true;
 				}
 				if(currThread != NULL){
+					tot_cntx_switches++;
 					swapcontext(&schedulerctx, &currThread->context);
 				}
 				
@@ -472,6 +473,7 @@ static void schedule() {
 				}
 
 				if(currThread != NULL){
+					tot_cntx_switches++;
 					swapcontext(&schedulerctx, &currThread->context);
 				}
 
@@ -617,7 +619,7 @@ void enqueue(tcb *thread){//insert tcb at end of runqueue
 
 tcb* dequeue(worker_t threadid){//delete node with specific thread tcb
 //return tcb to caller func 
-	tot_cntx_switches++;
+	
 	struct Node *ptr = runqueuehead;
 	struct Node *ptr2 = runqueuehead;
 
@@ -681,7 +683,6 @@ void menqueue(tcb *thread){ //enqueue for MLFQ
 
 tcb* mdequeue(worker_t threadid, int priority){ //dequeue for MLFQ
 	//return tcb to caller func 
-	tot_cntx_switches++;
 	struct Node *ptr = mlfq[priority];
 	struct Node *ptr2 = mlfq[priority];
 	struct Node *temp;
