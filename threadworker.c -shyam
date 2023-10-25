@@ -286,16 +286,19 @@ int worker_join(worker_t thread, void **value_ptr) {
 	/* currThread is waiting for thread with thread id (worker_t thread) to finish */
 	//use finishedThreads to see if finished and if not then swap back to scheduler
 
-	printf("currThread %d trying to join id %d\n", currThread->id, thread);
+	//printf("currThread %d trying to join id %d\n", currThread->id, thread);
 	// if(currThread->id == 0) return 0;
 
 	// if(thread == currThread->id) return -1; //calling thread joining itself
 
 	//SHOULD NOT HAPPEN
 	//maybe instead of return, swapcontext(&(currThread->context), &schedulerctx);
+	int cnt=0;
 
 	while(finishedThreads[thread] != true){//while param thread not finished, yield CPU since don't need to continue running
 		int waiting = worker_yield();
+		cnt++;
+		if(cnt == 3) currThread->priority = NUM_QUEUES -1;
 	}
 
 	//param thread finished and can exit out of calling (currThread) thread
@@ -479,7 +482,7 @@ static void schedule() {
 
 				if(currThread != NULL){//thread not finished
 					clock_gettime(CLOCK_REALTIME,&(endt));
-					clock_gettime(CLOCK_REALTIME,&(endr));
+					
 					//check w/ timeslice and compare to timeran
 					currThread->timeRan += (endt.tv_sec - startt.tv_sec) * 1000 + (endt.tv_nsec - startt.tv_nsec) / 1000000;
 					if(currThread->timeRan >= timeslice){//move down priority and reset timeran
@@ -496,6 +499,7 @@ static void schedule() {
 				}
 
 				//check for RESET
+				clock_gettime(CLOCK_REALTIME,&(endr));
 				resettime += (endr.tv_sec - startr.tv_sec) * 1000 + (endr.tv_nsec - startr.tv_nsec) / 1000000;
 				if(resettime >= (RESET / 1000)){//move all threads to top priority
 					timer.it_value.tv_usec = 0;
@@ -569,7 +573,7 @@ static void sched_mlfq() {
 			id = ptr->data->id;
 			currThread = mdequeue(id, i);
 			currThread->status = RUNNING;
-			printf("currThread is %d\n", id);
+			//printf("currThread is in sched_mlfq %d\n", id);
 			return;
 		}
 	}
@@ -727,7 +731,7 @@ void resetthreads(){//move all queues up to highest priority level
 			movingThread->priority = 0;
 			movingThread->timeRan = 0;
 			menqueue(movingThread);
-			printf("thread being moved is %d\n", id);
+			//printf("thread being moved is %d\n", id);
 
 			ptr = mlfq[i];
 		}
@@ -737,7 +741,7 @@ void resetthreads(){//move all queues up to highest priority level
 
 void handler(int signum){//signal handler
 	if(currThread != NULL){
-		printf("currThread is %d\n", currThread->id);
+		//printf("currThread is in signal handler %d\n", currThread->id);
 		swapcontext(&(currThread->context),&schedulerctx);
 	}
 
